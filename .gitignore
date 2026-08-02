@@ -1,0 +1,37 @@
+# ===== System Files =====
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+*~
+
+# ===== IDE / Editor =====
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ===== Agent / AI Config =====
+AGENTS.md
+docs/
+.cursor/
+.cursorrules
+.github/copilot-instructions.md
+
+# ===== Environment & Secrets =====
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+
+# ===== Logs =====
+*.log
+npm-debug.log*
+
+# ===== Temporary =====
+*.tmp
+*.bak
+*.cache

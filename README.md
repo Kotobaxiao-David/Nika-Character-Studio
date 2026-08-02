@@ -140,7 +140,7 @@ A: 系统会自动尝试多种编码格式。如果仍显示乱码，可以手�
 
 本项目采用 **GNU Affero General Public License v3.0 (AGPL-3.0)** 许可证。
 
-本项目包含基于MIT许可证的 [Midsummer's Bird](https://github.com/csjafuwvbegscbw-star/Midsummer-s-Bird) 项目的代码（chat.html），原始MIT许可证声明已包含在LICENSE文件中。
+本项目包含基于MIT许可证的 [Midsummer's Bird](https://github.com/csjafuwvbegscbw-star/Midsummer-s-Bird) 项目的代码（chat.html）以及[Models.dev](https://github.com/anomalyco/models.dev/)中的API文件，原始MIT许可证声明已包含在LICENSE文件中。
 
 详见 [LICENSE](LICENSE) 文件。
 
@@ -303,7 +303,7 @@ A: The system automatically tries multiple encoding formats. If garbled text sti
 
 This project is licensed under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
-This project includes code from [Midsummer's Bird](https://github.com/csjafuwvbegscbw-star/Midsummer-s-Bird) (chat.html) which is licensed under the MIT License. The original MIT license notice is included in the LICENSE file.
+This project includes code  from [Midsummer's Bird](https://github.com/csjafuwvbegscbw-star/Midsummer-s-Bird) in chat.html and the API configuration file from [Models.dev](https://github.com/anomalyco/models.dev/), both of which are licensed under the MIT License. Original MIT license notices are included in the LICENSE file.
 
 See [LICENSE](LICENSE) file for details.
 
@@ -319,6 +319,8 @@ The chat functionality of this project is developed and extended based on the op
 - Beautiful theme customization system
 
 Thanks to the original author **Soaring Bird** for the open-source contribution, providing such an excellent tool for the AI role-playing community!
+
+Special thanks to **Models.dev** for providing the API configuration data!
 
 ---
 
