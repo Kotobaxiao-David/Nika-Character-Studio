@@ -1470,9 +1470,9 @@
                     data-i18n="sidebar.user">用户/UI设置</span></button>
             <button data-modal="sd-settings-modal"
                 class="nav-link w-full flex items-center gap-4 p-3 rounded-lg text-left"
-                data-i18n-title="sidebar.sdGeneration" title="SD生图设置"><i
+                data-i18n-title="sidebar.sdGeneration" title="生图设置"><i
                     class="fas fa-image text-xl w-6 text-center"></i><span class="font-medium"
-                    data-i18n="sidebar.sdGeneration">SD生图</span></button>
+                    data-i18n="sidebar.sdGeneration">生图</span></button>
         </nav>
     </aside>
 
@@ -2364,7 +2364,7 @@
                 class="flex justify-between items-center p-4 border-b theme-border-b flex-shrink-0 bg-opacity-90 backdrop-blur-sm z-10">
                 <h2 class="text-2xl font-bold primary-gradient-text flex items-center gap-3">
                     <i class="fas fa-image"></i>
-                    <span data-i18n="sd.title">SD生图设置</span>
+                    <span data-i18n="sd.title">生图设置</span>
                 </h2>
                 <button class="close-modal-btn text-gray-400 hover:text-gray-800">
                     <i class="fas fa-times text-xl"></i>
@@ -2376,8 +2376,8 @@
                 <div class="card p-4">
                     <label class="flex items-center justify-between cursor-pointer mb-4">
                         <div>
-                            <h3 class="font-medium mb-1" data-i18n="sd.enable">启用SD生图</h3>
-                            <p class="text-sm text-gray-500" data-i18n="sd.enableHint">启用后，聊天时会自动添加CG生成提示</p>
+                            <h3 class="font-medium mb-1" data-i18n="sd.enable">启用生图</h3>
+                            <p class="text-sm text-gray-500" data-i18n="sd.enableHint">启用后，聊天时会自动添加CG生成提示，可复制提示词至其他软件生图</p>
                         </div>
                         <input type="checkbox" id="sd-enabled" class="w-5 h-5 accent-primary-color">
                     </label>
@@ -2392,9 +2392,10 @@
                     </label>
                 </div>
 
-                <!-- API配置 -->
+                <!-- SD WebUI API配置 -->
                 <div class="card p-4">
-                    <h3 class="font-medium mb-3" data-i18n="sd.apiConfig">API配置</h3>
+                    <h3 class="font-medium mb-1" data-i18n="sd.apiConfig">SD WebUI API配置</h3>
+                    <p class="text-xs text-gray-500 mb-3" data-i18n="sd.apiConfigHint">以下配置仅用于SD WebUI生图，需要本地运行Stable Diffusion WebUI</p>
                     <div class="space-y-3">
                         <div>
                             <label class="block text-sm font-medium mb-1" data-i18n="sd.apiUrl">API地址</label>
@@ -2406,7 +2407,7 @@
 
                 <!-- 基础参数 -->
                 <div class="card p-4">
-                    <h3 class="font-medium mb-3" data-i18n="sd.basicParams">基础参数</h3>
+                    <h3 class="font-medium mb-3" data-i18n="sd.basicParams">SD 基础参数</h3>
                     <div class="grid grid-cols-2 gap-4">
                         <div>
                             <label class="block text-sm font-medium mb-1" data-i18n="sd.width">宽度</label>
@@ -3621,7 +3622,7 @@ body {
                     'sidebar.theme': '主题设置',
                     'sidebar.preferences': '偏好设置',
                     'sidebar.user': '用户/UI设置',
-                    'sidebar.sdGeneration': 'SD生图',
+                    'sidebar.sdGeneration': '生图',
                     'sidebar.newChat': '新对话',
                     'sidebar.summarize': '总结聊天',
                     'sidebar.promptPreview': 'Prompt预览',
@@ -3681,14 +3682,15 @@ body {
                     'char.save': '保存',
 
                     // SD生图设置
-                    'sd.title': 'SD生图设置',
-                    'sd.enable': '启用SD生图',
-                    'sd.enableHint': '启用后，聊天时会自动添加CG生成提示',
+                    'sd.title': '生图设置',
+                    'sd.enable': '启用生图',
+                    'sd.enableHint': '启用后，聊天时会自动添加CG生成提示，可复制提示词至其他软件生图',
                     'sd.largeImageMode': '大图模式',
                     'sd.largeImageModeHint': '生成后自动切换为大图显示，隐藏标题和描述',
-                    'sd.apiConfig': 'API配置',
+                    'sd.apiConfig': 'SD WebUI API配置',
+                    'sd.apiConfigHint': '以下配置仅用于SD WebUI生图，需要本地运行Stable Diffusion WebUI',
                     'sd.apiUrl': 'API地址',
-                    'sd.basicParams': '基础参数',
+                    'sd.basicParams': 'SD 基础参数',
                     'sd.width': '宽度',
                     'sd.height': '高度',
                     'sd.steps': '采样步数',
@@ -4053,7 +4055,7 @@ body {
                     'sidebar.theme': 'Theme',
                     'sidebar.preferences': 'Preferences',
                     'sidebar.user': 'User/UI',
-                    'sidebar.sdGeneration': 'SD Generation',
+                    'sidebar.sdGeneration': 'Image Gen',
                     'sidebar.newChat': 'New Chat',
                     'sidebar.summarize': 'Summarize',
                     'sidebar.promptPreview': 'Prompt Preview',
@@ -4113,14 +4115,15 @@ body {
                     'char.save': 'Save',
 
                     // SD Generation Settings
-                    'sd.title': 'SD Generation Settings',
-                    'sd.enable': 'Enable SD Generation',
-                    'sd.enableHint': 'When enabled, CG generation prompts will be automatically added during chat',
+                    'sd.title': 'Image Generation Settings',
+                    'sd.enable': 'Enable Image Generation',
+                    'sd.enableHint': 'When enabled, CG generation prompts will be automatically added during chat. You can copy prompts to other software for image generation',
                     'sd.largeImageMode': 'Large Image Mode',
                     'sd.largeImageModeHint': 'Auto-switch to large image display after generation, hiding title and description',
-                    'sd.apiConfig': 'API Configuration',
+                    'sd.apiConfig': 'SD WebUI API Configuration',
+                    'sd.apiConfigHint': 'The following settings are for SD WebUI image generation only. Requires running Stable Diffusion WebUI locally',
                     'sd.apiUrl': 'API URL',
-                    'sd.basicParams': 'Basic Parameters',
+                    'sd.basicParams': 'SD Basic Parameters',
                     'sd.width': 'Width',
                     'sd.height': 'Height',
                     'sd.steps': 'Sampling Steps',
@@ -15132,7 +15135,7 @@ CG信息：
                 // 生成卡片图片
                 async generateCardImage(button) {
                     if (!this.enabled) {
-                        alert('请先在SD生图设置中启用SD生图功能');
+                        alert('请先在生图设置中启用了生图功能');
                         return;
                     }
 
