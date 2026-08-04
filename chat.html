@@ -5342,6 +5342,8 @@ body {
                     visionModels: [...api.visionModelSelect.options].map(o => o.value).filter(o => o),
                 };
             }
+            // 暴露到全局，供SDGeneration等外部模块回退读取
+            window.api.getCurrentApiConfigFromForm = getCurrentApiConfigFromForm;
 
             function updateApiButtons() {
                 const hasSelection = !!api.savedSelect.value;
@@ -14001,10 +14003,18 @@ You must structure your entire output strictly in the following format, without 
 
                 // 获取LLM API配置
                 getApiConfig() {
-                    // 尝试从全局window对象获取
+                    // 尝试从全局window对象获取已保存的配置
                     if (window.api && window.api.currentId && window.api.configs) {
                         const config = window.api.configs[window.api.currentId];
                         if (config) return config;
+                    }
+
+                    // 回退：从当前UI表单读取（和chat消息发送一致）
+                    if (window.api && typeof window.api.getCurrentApiConfigFromForm === 'function') {
+                        const formConfig = window.api.getCurrentApiConfigFromForm();
+                        if (formConfig && formConfig.url && formConfig.model) {
+                            return formConfig;
+                        }
                     }
 
                     // 尝试从localStorage获取（备用方案）
