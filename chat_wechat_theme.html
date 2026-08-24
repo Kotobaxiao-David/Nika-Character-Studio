@@ -1175,7 +1175,15 @@
 
                 <div>
                     <label class="block text-sm font-medium mb-1" data-i18n="api.url">API URL (OpenAI 格式)</label>
-                    <input id="api-url" type="text" class="w-full light-input rounded-md p-2" data-i18n-placeholder="api.placeholder.url">
+                    <div class="flex gap-2">
+                        <input id="api-url" type="text" class="flex-1 light-input rounded-md p-2" data-i18n-placeholder="api.placeholder.url">
+                        <button id="pick-provider-btn-chat" class="py-2 px-3 btn-primary rounded-lg text-sm whitespace-nowrap flex-shrink-0">
+                            <i class="fas fa-database mr-1"></i><span>模型库</span>
+                        </button>
+                        <button id="sync-providers-btn-chat" class="py-2 px-3 btn-secondary rounded-lg text-sm whitespace-nowrap flex-shrink-0">
+                            <i class="fas fa-cloud-download-alt mr-1"></i><span>同步云端</span>
+                        </button>
+                    </div>
                     <div class="text-xs text-gray-500 mt-1 space-y-1">
                         <div><b data-i18n="api.supportedFormats">支持格式:</b> DeepSeek, OpenAI, SiliconFlow, Google Gemini 等.</div>
                         <div class="text-red-500"><b data-i18n="api.note">注意:</b> <span data-i18n="api.googleKeyNote">Google API密钥以 `AIza...` 开头.</span></div>
@@ -1212,7 +1220,12 @@
                 <div class="space-y-3">
                     <div>
                         <label class="block text-sm font-medium mb-1" data-i18n="api.visionUrl">识图 API URL</label>
-                        <input id="vision-api-url" type="text" class="w-full light-input rounded-md p-2" data-i18n-placeholder="api.placeholder.url">
+                        <div class="flex gap-2">
+                            <input id="vision-api-url" type="text" class="flex-1 light-input rounded-md p-2" data-i18n-placeholder="api.placeholder.url">
+                            <button id="pick-vision-provider-btn" class="py-2 px-3 btn-primary rounded-lg text-sm whitespace-nowrap flex-shrink-0">
+                                <i class="fas fa-database mr-1"></i><span>从模型库选择</span>
+                            </button>
+                        </div>
                     </div>
 
                     <div>
@@ -1300,6 +1313,7 @@
                         <label class="text-sm col-span-2">Context Size (Tokens)</label>
                         <input type="number" id="param-context-size" min="1" max="32768" step="1" class="light-input rounded-md p-1 col-span-3">
                     </div>
+                    <p id="model-limit-hint" class="text-xs mb-1" style="display:none;color:var(--primary-color,#5E5B9D);"></p>
                     <div class="p-3 theme-info-bg rounded-lg text-xs theme-text-secondary">
                         <div class="flex justify-between mb-1">
                             <span data-i18n="presets.remainingContext">剩余上下文：</span>
@@ -4270,6 +4284,300 @@ body {
             api.directChatTestBtn.addEventListener('click', directChatTest);
             api.loadModelsBtn.addEventListener('click', () => loadModels(false));
             api.loadVisionModelsBtn.addEventListener('click', () => loadModels(true));
+
+            // --- models.dev 提供商选择器 (chat_wechat_theme.html 内联版) ---
+            const _chatProvidersCache = { data: null };
+
+            // 提供商数据提取配置（与 part1.js 保持同步）
+            const _CHAT_PROVIDER_MANUAL_URLS = { openai:'https://api.openai.com/v1', mistral:'https://api.mistral.ai/v1', groq:'https://api.groq.com/openai/v1', xai:'https://api.x.ai/v1', togetherai:'https://api.together.xyz/v1', deepinfra:'https://api.deepinfra.com/v1/openai', perplexity:'https://api.perplexity.ai' };
+            const _CHAT_NON_OPENAI_NPM = ['@ai-sdk/anthropic', '@ai-sdk/google', '@ai-sdk/google-vertex'];
+
+            function chatExtractSlimProviders(rawData) {
+                const result = [];
+                for (const [pid, v] of Object.entries(rawData)) {
+                    if (v._comment_zh || v._comment_en) continue;
+                    const npm = v.npm || '';
+                    if (_CHAT_NON_OPENAI_NPM.some(n => npm.includes(n))) continue;
+                    const api = v.api || _CHAT_PROVIDER_MANUAL_URLS[pid] || '';
+                    if (!api) continue;
+                    const models = [];
+                    for (const [mid, mval] of Object.entries(v.models || {})) {
+                        const m = { id: mid, name: mval.name || mid };
+                        if (mval.modalities) m.modalities = mval.modalities;
+                        if (mval.limit) m.limit = mval.limit;
+                        models.push(m);
+                    }
+                    result.push({ id: pid, name: v.name || pid, api, models });
+                }
+                return result;
+            }
+
+            async function chatLoadProvidersData() {
+                if (_chatProvidersCache.data) return _chatProvidersCache.data;
+                function filterComments(arr) { return arr.filter(item => !item._comment_zh && !item._comment_en); }
+                try {
+                    const cached = await idbStorage.getItem('providers_data');
+                    if (cached) {
+                        const parsed = JSON.parse(cached);
+                        if (Array.isArray(parsed) && parsed.length > 0) {
+                            _chatProvidersCache.data = filterComments(parsed);
+                            return _chatProvidersCache.data;
+                        }
+                    }
+                } catch {}
+                try {
+                    const resp = await fetch('models-providers.json');
+                    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+                    const data = await resp.json();
+                    if (Array.isArray(data) && data.length > 0) {
+                        const filtered = filterComments(data);
+                        _chatProvidersCache.data = filtered;
+                        idbStorage.setItem('providers_data', JSON.stringify(filtered)).catch(() => {});
+                        return filtered;
+                    }
+                } catch (e) {
+                    console.warn('加载 models-providers.json 失败:', e);
+                }
+                return [];
+            }
+
+            function chatShowProviderPicker(options = {}) {
+                const filterImage = options.filterImageModels || false;
+                const titleText = filterImage ? '选择识图模型' : '从模型库选择';
+                const modalId = 'chat-provider-picker-modal';
+                const existing = document.getElementById(modalId);
+                if (existing) existing.remove();
+
+                const modal = document.createElement('div');
+                modal.id = modalId;
+                modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:10002;display:flex;align-items:center;justify-content:center;padding:1rem;';
+                modal.innerHTML = `
+                    <div style="background:var(--card-bg-color,#fff);border-radius:12px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;color:var(--text-color,#1a1a1d);box-shadow:0 10px 30px rgba(0,0,0,0.2);border:1px solid var(--border-color,#dcdfe3);">
+                        <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#dcdfe3);display:flex;justify-content:space-between;align-items:center;">
+                            <h3 style="margin:0;font-size:18px;font-weight:bold;">${titleText}</h3>
+                            <button id="cpp-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:0 5px;">&times;</button>
+                        </div>
+                        <div style="padding:12px 20px;border-bottom:1px solid var(--border-color,#dcdfe3);">
+                            <input id="cpp-search" type="text" placeholder="搜索提供商..." class="w-full light-input rounded-md p-2">
+                        </div>
+                        <div id="cpp-list" style="flex:1;overflow-y:auto;padding:4px 0;">
+                            <div style="text-align:center;padding:30px;color:#888;">加载中...</div>
+                        </div>
+                        <div id="cpp-models" style="display:none;padding:12px 20px;border-top:1px solid var(--border-color,#dcdfe3);background:var(--bg-color,#f0f2f5);">
+                            <label style="display:block;margin-bottom:6px;font-weight:600;font-size:14px;">选择模型</label>
+                            <div style="display:flex;gap:8px;">
+                                <select id="cpp-model-select" class="flex-1 light-input rounded-md p-2"></select>
+                                <button id="cpp-confirm" class="py-2 px-4 btn-primary rounded-lg font-medium whitespace-nowrap">确认</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                document.getElementById('cpp-close').onclick = () => modal.remove();
+                modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+                let allProviders = [];
+                let selectedProvider = null;
+
+                chatLoadProvidersData().then(providers => {
+                    allProviders = providers;
+                    renderList(allProviders);
+                });
+
+                function renderList(list) {
+                    const container = document.getElementById('cpp-list');
+                    if (list.length === 0) {
+                        container.innerHTML = '<div style="text-align:center;padding:30px;color:#888;">未找到匹配的提供商</div>';
+                        return;
+                    }
+                    container.innerHTML = list.map(p => {
+                        const allModels = p.models || [];
+                        let displayModels = allModels;
+                        if (filterImage) {
+                            displayModels = allModels.filter(m => {
+                                const inp = (m.modalities || {}).input || [];
+                                const out = (m.modalities || {}).output || [];
+                                return inp.includes('image') && out.includes('text');
+                            });
+                        }
+                        const mc = displayModels.length;
+                        const label = filterImage ? '识图模型' : '模型';
+                        if (filterImage && mc === 0) return '';
+                        return `<div class="cpp-item" data-id="${p.id}" style="padding:10px 20px;cursor:pointer;transition:background 0.15s;border-left:3px solid transparent;">
+                            <div style="font-weight:600;font-size:14px;">${p.name}</div>
+                            <div style="font-size:12px;color:#888;margin-top:2px;">${p.api} · ${mc} 个${label}</div>
+                        </div>`;
+                    }).filter(Boolean).join('');
+                    container.querySelectorAll('.cpp-item').forEach(el => {
+                        el.onmouseenter = () => { el.style.background = 'rgba(94,91,157,0.08)'; el.style.borderLeftColor = 'var(--primary-color,#5E5B9D)'; };
+                        el.onmouseleave = () => { el.style.background = 'none'; el.style.borderLeftColor = 'transparent'; };
+                        el.onclick = () => {
+                            const pid = el.dataset.id;
+                            selectedProvider = allProviders.find(p => p.id === pid);
+                            if (!selectedProvider) return;
+                            container.querySelectorAll('.cpp-item').forEach(x => { x.style.background = 'none'; x.style.borderLeftColor = 'transparent'; });
+                            el.style.background = 'rgba(94,91,157,0.1)';
+                            el.style.borderLeftColor = 'var(--primary-color,#5E5B9D)';
+
+                            const modelsPanel = document.getElementById('cpp-models');
+                            const modelSelect = document.getElementById('cpp-model-select');
+                            modelsPanel.style.display = 'block';
+
+                            let models = selectedProvider.models || [];
+                            if (filterImage) {
+                                models = models.filter(m => {
+                                    const inp = (m.modalities || {}).input || [];
+                                    const out = (m.modalities || {}).output || [];
+                                    return inp.includes('image') && out.includes('text');
+                                });
+                            }
+
+                            if (models.length === 0) {
+                                modelSelect.innerHTML = '<option value="">' + (filterImage ? '该提供商无识图模型' : '无可用模型') + '</option>';
+                            } else {
+                                modelSelect.innerHTML = models.map(m =>
+                                    `<option value="${m.id}">${m.name || m.id}</option>`
+                                ).join('');
+                            }
+                        };
+                    });
+                }
+
+                document.getElementById('cpp-search').oninput = (e) => {
+                    const q = e.target.value.toLowerCase().trim();
+                    if (!q) { renderList(allProviders); return; }
+                    renderList(allProviders.filter(p => p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)));
+                };
+
+                document.getElementById('cpp-confirm').onclick = () => {
+                    if (!selectedProvider) return;
+                    const modelId = document.getElementById('cpp-model-select').value;
+                    let endpoint = selectedProvider.api.replace(/\/+$/, '');
+
+                    const selectedModel = (selectedProvider.models || []).find(m => m.id === modelId);
+                    const result = { endpoint, model: modelId, modelName: selectedModel ? selectedModel.name : modelId, providerName: selectedProvider.name };
+                    if (selectedModel && selectedModel.limit) {
+                        if (selectedModel.limit.context) result.context = selectedModel.limit.context;
+                        if (selectedModel.limit.output) result.maxTokens = selectedModel.limit.output;
+                    }
+
+                    if (options.onConfirm) {
+                        options.onConfirm(result);
+                    } else {
+                        document.getElementById('api-url').value = endpoint;
+                        document.getElementById('model-name').value = modelId;
+                        var hint = document.getElementById('model-limit-hint');
+                        if (result.context) {
+                            hint.textContent = '根据数据库，来自' + result.providerName + '的「' + result.modelName + '」模型的最大上下文为 ' + result.context.toLocaleString() + (result.maxTokens ? '，最大输出为 ' + result.maxTokens.toLocaleString() : '') + '。';
+                            hint.style.display = 'block';
+                        } else {
+                            hint.style.display = 'none';
+                        }
+                    }
+                    modal.remove();
+                };
+            }
+
+            const pickProviderBtnChat = document.getElementById('pick-provider-btn-chat');
+            if (pickProviderBtnChat) {
+                pickProviderBtnChat.addEventListener('click', () => chatShowProviderPicker());
+            }
+
+            // 识图 API 从模型库选择
+            const pickVisionProviderBtn = document.getElementById('pick-vision-provider-btn');
+            if (pickVisionProviderBtn) {
+                pickVisionProviderBtn.addEventListener('click', () => {
+                    chatShowProviderPicker({
+                        filterImageModels: true,
+                        onConfirm: (result) => {
+                            document.getElementById('vision-api-url').value = result.endpoint;
+                            const select = document.getElementById('vision-model-select');
+                            const opt = document.createElement('option');
+                            opt.value = result.model;
+                            opt.textContent = result.model;
+                            select.appendChild(opt);
+                            select.value = result.model;
+                            select.classList.remove('hidden');
+                            var hint = document.getElementById('model-limit-hint');
+                            if (result.context) {
+                                hint.textContent = '根据数据库，来自' + result.providerName + '的「' + result.modelName + '」模型的最大上下文为 ' + result.context.toLocaleString() + (result.maxTokens ? '，最大输出为 ' + result.maxTokens.toLocaleString() : '') + '。';
+                                hint.style.display = 'block';
+                            } else {
+                                hint.style.display = 'none';
+                            }
+                        }
+                    });
+                });
+            }
+
+            // 同步云端模型库（chat_wechat_theme.html 内联版）
+            async function chatCheckProvidersUpdate() {
+                const modalId = 'providers-sync-modal';
+                const existing = document.getElementById(modalId);
+                if (existing) existing.remove();
+
+                const modal = document.createElement('div');
+                modal.id = modalId;
+                modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.5);backdrop-filter:blur(4px);z-index:10003;display:flex;align-items:center;justify-content:center;padding:1rem;';
+                modal.innerHTML = `
+                    <div style="background:var(--card-bg-color,#fff);border-radius:12px;width:90%;max-width:420px;color:var(--text-color,#1a1a1d);box-shadow:0 10px 30px rgba(0,0,0,0.2);border:1px solid var(--border-color,#dcdfe3);overflow:hidden;">
+                        <div style="padding:16px 20px;border-bottom:1px solid var(--border-color,#dcdfe3);">
+                            <h3 style="margin:0;color:#ff9800;font-size:16px;font-weight:bold;">⚠️ 同步云端模型库</h3>
+                        </div>
+                        <div style="padding:20px;line-height:1.7;font-size:14px;">
+                            <p style="margin:0 0 12px;">数据源 <b>models.dev</b> 在中国内地访问不稳定，同步可能失败或超时。</p>
+                            <p style="margin:0 0 12px;">同步将<b>替换</b>当前提供商列表，如果网络不稳定可能导致列表清空。</p>
+                            <p style="margin:0;color:#888;font-size:12px;">已有的本地数据会在同步成功后被覆盖。</p>
+                        </div>
+                        <div style="padding:12px 20px;border-top:1px solid var(--border-color,#dcdfe3);display:flex;gap:10px;justify-content:flex-end;">
+                            <button id="sync-cancel-btn" class="btn-secondary px-4 py-2 rounded-lg text-sm">取消</button>
+                            <button id="sync-confirm-btn" class="btn-primary px-4 py-2 rounded-lg text-sm font-bold">确认同步</button>
+                        </div>
+                        <div id="sync-status" style="display:none;padding:10px 20px;border-top:1px solid var(--border-color,#dcdfe3);font-size:13px;text-align:center;"></div>
+                    </div>
+                `;
+                document.body.appendChild(modal);
+
+                document.getElementById('sync-cancel-btn').onclick = () => modal.remove();
+                modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+                document.getElementById('sync-confirm-btn').onclick = async () => {
+                    const statusEl = document.getElementById('sync-status');
+                    const confirmBtn = document.getElementById('sync-confirm-btn');
+                    confirmBtn.disabled = true;
+                    confirmBtn.textContent = '同步中...';
+                    statusEl.style.display = 'block';
+                    statusEl.style.color = '#888';
+                    statusEl.textContent = '正在从 models.dev 获取数据...';
+
+                    try {
+                        const resp = await fetch('https://models.dev/api.json');
+                        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                        const rawData = await resp.json();
+
+                        const slim = chatExtractSlimProviders(rawData);
+                        if (slim.length === 0) throw new Error('提取数据为空');
+
+                        await idbStorage.setItem('providers_data', JSON.stringify(slim));
+                        _chatProvidersCache.data = null;
+
+                        statusEl.style.color = '#10b981';
+                        statusEl.textContent = '✅ 同步成功！已加载 ' + slim.length + ' 个提供商。';
+                        setTimeout(() => modal.remove(), 2000);
+                    } catch (e) {
+                        statusEl.style.color = '#ef4444';
+                        statusEl.textContent = '❌ 同步失败：' + e.message + '。已保留当前数据。';
+                        confirmBtn.disabled = false;
+                        confirmBtn.textContent = '重试';
+                    }
+                };
+            }
+
+            const syncProvidersBtnChat = document.getElementById('sync-providers-btn-chat');
+            if (syncProvidersBtnChat) {
+                syncProvidersBtnChat.addEventListener('click', chatCheckProvidersUpdate);
+            }
             
             // 同步输入框和下拉框的值 (UI 优化)
             api.modelSelect.addEventListener('change', () => { 

@@ -3490,7 +3490,11 @@
         <div id="tavern-direct-settings" class="connection-type-settings">
           <div class="field-group">
             <label for="tavern-api-endpoint" data-i18n="api-url">API URL</label>
-            <input type="text" id="tavern-api-endpoint" placeholder="http://api.xxx.com/v1">
+            <div style="display:flex;gap:8px;align-items:center;">
+              <input type="text" id="tavern-api-endpoint" placeholder="http://api.xxx.com/v1" style="flex:1;">
+              <button type="button" id="pick-provider-btn" onclick="showProviderPickerModal(function(r){document.getElementById('tavern-api-endpoint').value=r.endpoint;document.getElementById('tavern-model').value=r.model;var hint=document.getElementById('tavern-model-hint');if(r.context){hint.textContent='根据数据库，来自'+r.providerName+'的「'+r.modelName+'」模型的最大上下文为 '+r.context.toLocaleString()+(r.maxTokens?'，最大输出为 '+r.maxTokens.toLocaleString():'')+'。';hint.style.display='block';}else{hint.style.display='none';}})" style="background:var(--primary-color,#e67e22);color:white;padding:8px 12px;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;font-size:13px;">从模型库选择</button>
+              <button type="button" onclick="checkProvidersUpdate()" style="background:#555;color:white;padding:8px 12px;border:none;border-radius:4px;cursor:pointer;white-space:nowrap;font-size:13px;">同步云端模型库</button>
+            </div>
           </div>
           <div class="field-group">
             <label for="tavern-api-key" data-i18n="api-key">API Key</label>
@@ -3539,6 +3543,7 @@
           <label for="tavern-context-window">最大上下文</label>
           <input type="number" id="tavern-context-window" value="1000000" min="1000" step="1000" style="width: 150px;" placeholder="默认 1000000 (1M)">
           <p class="help-text">模型的最大上下文窗口大小（token），用于小说转世界书字数超限判断</p>
+          <p id="tavern-model-hint" class="help-text" style="display:none;color:#e67e22;"></p>
         </div>
       </div>
 
@@ -5531,7 +5536,7 @@
         'api-provider-gemini': 'Gemini (直链，需魔法)[废弃]',
         'api-provider-gemini-proxy': 'Gemini (中转站)[废弃]',
         'api-provider-ollama': 'Ollama (bat启动)',
-        'api-provider-local': 'LM Stuodio (bat启动)',
+        'api-provider-local': 'LM Studio (bat启动)',
         'api-provider-tavern': '公益站/自定义（推荐）',
         'edit-instruction': '编辑指令',
         'instruction-beautify': '指令与前端美化',

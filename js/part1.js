@@ -4411,3 +4411,373 @@ function applySortSuggestions() {
         closeSortSuggestionModal();
     }
 }
+
+// ============================================================
+// models.dev 提供商选择器
+// 从本地 models-providers.json 加载提供商数据，缓存到 IndexedDB
+// ============================================================
+
+const ProvidersDB = {
+    dbName: 'ProvidersDB',
+    version: 1,
+
+    async openDB() {
+        return new Promise((resolve, reject) => {
+            const request = indexedDB.open(this.dbName, this.version);
+            request.onerror = () => reject(request.error);
+            request.onsuccess = () => resolve(request.result);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('providers')) {
+                    db.createObjectStore('providers', { keyPath: 'key' });
+                }
+            };
+        });
+    },
+
+    async get(key) {
+        try {
+            const db = await this.openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(['providers'], 'readonly');
+                const store = tx.objectStore('providers');
+                const req = store.get(key);
+                req.onsuccess = () => resolve(req.result?.value || null);
+                req.onerror = () => reject(req.error);
+            });
+        } catch { return null; }
+    },
+
+    async set(key, value) {
+        try {
+            const db = await this.openDB();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(['providers'], 'readwrite');
+                const store = tx.objectStore('providers');
+                store.put({ key, value });
+                tx.oncomplete = () => resolve();
+                tx.onerror = () => reject(tx.error);
+            });
+        } catch { /* 静默失败 */ }
+    }
+};
+
+// 已缓存的提供商数据
+let _providersData = null;
+
+// 加载提供商数据（优先 IndexedDB 缓存，降级 fetch 本地文件）
+async function loadProvidersData() {
+    if (_providersData) return _providersData;
+
+    // 过滤掉注释对象的辅助函数
+    function filterComments(arr) {
+        return arr.filter(item => !item._comment_zh && !item._comment_en);
+    }
+
+    // 1. 尝试从 IndexedDB 缓存读取
+    try {
+        const cached = await ProvidersDB.get('providers_data');
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+            _providersData = filterComments(cached);
+            mylog('ProvidersDB: 从缓存加载', _providersData.length, '个提供商');
+            return _providersData;
+        }
+    } catch (e) {
+        mylog('ProvidersDB 缓存读取失败:', e);
+    }
+
+    // 2. fetch 本地 JSON 文件
+    try {
+        const resp = await fetch('models-providers.json');
+        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        const data = await resp.json();
+        if (Array.isArray(data) && data.length > 0) {
+            _providersData = filterComments(data);
+            // 异步写入缓存，不阻塞返回
+            ProvidersDB.set('providers_data', _providersData).catch(() => {});
+            mylog('ProvidersDB: 从文件加载', _providersData.length, '个提供商');
+            return _providersData;
+        }
+    } catch (e) {
+        console.warn('加载 models-providers.json 失败:', e);
+    }
+
+    return [];
+}
+
+// 显示提供商选择弹窗
+// callback({ endpoint, model, providerName }) 在用户确认选择后调用
+// options.filterImageModels = true → 只显示支持图片输入的模型（识图 API）
+function showProviderPickerModal(callback, options = {}) {
+    const filterImage = options.filterImageModels || false;
+    const modalId = 'provider-picker-modal';
+    const titleText = filterImage ? '选择识图模型' : '从模型库选择';
+
+    // 如果弹窗已存在则移除
+    const existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    // 创建弹窗 HTML
+    const modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10002;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+        <div style="background:var(--light-bg,#2d2d2d);border-radius:10px;width:90%;max-width:500px;max-height:80vh;display:flex;flex-direction:column;color:var(--text-color,#f0f0f0);box-shadow:0 10px 30px rgba(0,0,0,0.5);">
+            <div style="padding:15px 20px;border-bottom:1px solid #444;display:flex;justify-content:space-between;align-items:center;">
+                <h3 style="margin:0;color:var(--primary-color,#e67e22);font-size:18px;">${titleText}</h3>
+                <button id="provider-picker-close" style="background:none;border:none;color:#888;font-size:20px;cursor:pointer;padding:0 5px;">&times;</button>
+            </div>
+            <div style="padding:12px 20px;border-bottom:1px solid #444;">
+                <input id="provider-picker-search" type="text" placeholder="搜索提供商..." style="width:100%;padding:8px 12px;border:1px solid #555;border-radius:5px;background:var(--input-bg,#333);color:var(--text-color,#f0f0f0);font-size:14px;box-sizing:border-box;">
+            </div>
+            <div id="provider-picker-list" style="flex:1;overflow-y:auto;padding:8px 0;">
+                <div style="text-align:center;padding:30px;color:#888;">加载中...</div>
+            </div>
+            <div id="provider-picker-models" style="display:none;padding:12px 20px;border-top:1px solid #444;">
+                <label style="display:block;margin-bottom:6px;font-weight:bold;color:var(--primary-color,#e67e22);">选择模型</label>
+                <div style="display:flex;gap:8px;">
+                    <select id="provider-picker-model-select" style="flex:1;padding:8px;border:1px solid #555;border-radius:5px;background:var(--input-bg,#333);color:var(--text-color,#f0f0f0);font-size:14px;"></select>
+                    <button id="provider-picker-confirm" style="padding:8px 16px;background:var(--primary-color,#e67e22);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold;white-space:nowrap;">确认选择</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    document.body.appendChild(modal);
+
+    // 关闭按钮
+    document.getElementById('provider-picker-close').onclick = () => modal.remove();
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+    // 加载数据
+    let allProviders = [];
+    let selectedProvider = null;
+
+    loadProvidersData().then(providers => {
+        allProviders = providers;
+        renderProviderList(allProviders);
+    });
+
+    // 渲染提供商列表
+    function renderProviderList(list) {
+        const container = document.getElementById('provider-picker-list');
+        if (list.length === 0) {
+            container.innerHTML = '<div style="text-align:center;padding:30px;color:#888;">未找到匹配的提供商</div>';
+            return;
+        }
+        container.innerHTML = list.map(p => {
+            const allModels = p.models || [];
+            // 根据过滤模式筛选模型
+            let displayModels = allModels;
+            if (filterImage) {
+                displayModels = allModels.filter(m => {
+                    const inp = (m.modalities || {}).input || [];
+                    const out = (m.modalities || {}).output || [];
+                    return inp.includes('image') && out.includes('text');
+                });
+            }
+            const modelCount = displayModels.length;
+            const label = filterImage ? '识图模型' : '模型';
+            if (filterImage && modelCount === 0) return '';
+            return `<div class="provider-picker-item" data-id="${p.id}" style="padding:10px 20px;cursor:pointer;border-left:3px solid transparent;transition:all 0.15s;">
+                <div style="font-weight:bold;font-size:14px;">${p.name}</div>
+                <div style="font-size:12px;color:#888;margin-top:2px;">${p.api} · ${modelCount} 个${label}</div>
+            </div>`;
+        }).filter(Boolean).join('');
+
+        // 点击事件
+        container.querySelectorAll('.provider-picker-item').forEach(el => {
+            el.onmouseenter = () => { el.style.background = 'rgba(230,126,34,0.1)'; el.style.borderLeftColor = 'var(--primary-color,#e67e22)'; };
+            el.onmouseleave = () => { el.style.background = 'none'; el.style.borderLeftColor = 'transparent'; };
+            el.onclick = () => {
+                const pid = el.dataset.id;
+                selectedProvider = allProviders.find(p => p.id === pid);
+                if (!selectedProvider) return;
+
+                // 高亮选中
+                container.querySelectorAll('.provider-picker-item').forEach(x => {
+                    x.style.background = 'none';
+                    x.style.borderLeftColor = 'transparent';
+                });
+                el.style.background = 'rgba(230,126,34,0.15)';
+                el.style.borderLeftColor = 'var(--primary-color,#e67e22)';
+
+                // 显示模型选择
+                const modelsPanel = document.getElementById('provider-picker-models');
+                const modelSelect = document.getElementById('provider-picker-model-select');
+                modelsPanel.style.display = 'block';
+
+                // 根据是否过滤识图模型来筛选
+                let models = selectedProvider.models || [];
+                if (filterImage) {
+                    models = models.filter(m => {
+                        const inp = (m.modalities || {}).input || [];
+                        const out = (m.modalities || {}).output || [];
+                        return inp.includes('image') && out.includes('text');
+                    });
+                }
+
+                if (models.length === 0) {
+                    modelSelect.innerHTML = '<option value="">' + (filterImage ? '该提供商无识图模型' : '无可用模型') + '</option>';
+                } else {
+                    modelSelect.innerHTML = models.map(m =>
+                        `<option value="${m.id}">${m.name || m.id}</option>`
+                    ).join('');
+                }
+            };
+        });
+    }
+
+    // 搜索
+    document.getElementById('provider-picker-search').oninput = (e) => {
+        const q = e.target.value.toLowerCase().trim();
+        if (!q) {
+            renderProviderList(allProviders);
+            return;
+        }
+        const filtered = allProviders.filter(p =>
+            p.name.toLowerCase().includes(q) || p.id.toLowerCase().includes(q)
+        );
+        renderProviderList(filtered);
+    };
+
+    // 确认选择
+    document.getElementById('provider-picker-confirm').onclick = () => {
+        if (!selectedProvider) return;
+        const modelSelect = document.getElementById('provider-picker-model-select');
+        const modelId = modelSelect.value;
+
+        let endpoint = selectedProvider.api.replace(/\/+$/, '');
+
+        // 查找选中模型的上下文和输出限制
+        const selectedModel = (selectedProvider.models || []).find(m => m.id === modelId);
+        const result = {
+            endpoint: endpoint,
+            model: modelId,
+            modelName: selectedModel ? selectedModel.name : modelId,
+            providerName: selectedProvider.name
+        };
+        if (selectedModel && selectedModel.limit) {
+            if (selectedModel.limit.context) result.context = selectedModel.limit.context;
+            if (selectedModel.limit.output) result.maxTokens = selectedModel.limit.output;
+        }
+
+        callback(result);
+
+        modal.remove();
+    };
+}
+
+// ============================================================
+// 同步云端模型库 - 从 models.dev 远程更新提供商数据
+// ============================================================
+
+// 需要手动补 URL 的提供商（models.dev 中 api 字段为空但实际支持 OpenAI 格式）
+const _PROVIDER_MANUAL_URLS = {
+    'openai': 'https://api.openai.com/v1',
+    'mistral': 'https://api.mistral.ai/v1',
+    'groq': 'https://api.groq.com/openai/v1',
+    'xai': 'https://api.x.ai/v1',
+    'togetherai': 'https://api.together.xyz/v1',
+    'deepinfra': 'https://api.deepinfra.com/v1/openai',
+    'perplexity': 'https://api.perplexity.ai',
+};
+
+// 非 OpenAI 兼容格式的 npm 包名（需要排除）
+const _NON_OPENAI_NPM = [
+    '@ai-sdk/anthropic',
+    '@ai-sdk/google',
+    '@ai-sdk/google-vertex',
+];
+
+// 从 models.dev 原始数据中提取精简格式（全量同步，排除非 OpenAI 格式）
+function _extractSlimProviders(rawData) {
+    const result = [];
+    for (const [pid, v] of Object.entries(rawData)) {
+        // 跳过注释对象
+        if (v._comment_zh || v._comment_en) continue;
+        // 排除使用非 OpenAI 格式的提供商
+        const npm = v.npm || '';
+        if (_NON_OPENAI_NPM.some(n => npm.includes(n))) continue;
+
+        // 获取 API URL：优先用 models.dev 的 api 字段，其次用手动 URL
+        const api = v.api || _PROVIDER_MANUAL_URLS[pid] || '';
+        if (!api) continue;
+
+        // 提取模型列表，透传 modalities 和 limit
+        const models = [];
+        for (const [mid, mval] of Object.entries(v.models || {})) {
+            const m = { id: mid, name: mval.name || mid };
+            if (mval.modalities) m.modalities = mval.modalities;
+            if (mval.limit) m.limit = mval.limit;
+            models.push(m);
+        }
+
+        result.push({ id: pid, name: v.name || pid, api, models });
+    }
+    return result;
+}
+
+// 同步云端模型库（带自定义警告弹窗）
+async function checkProvidersUpdate() {
+    const modalId = 'providers-sync-modal';
+    const existing = document.getElementById(modalId);
+    if (existing) existing.remove();
+
+    const modal = document.createElement('div');
+    modal.id = modalId;
+    modal.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10003;display:flex;align-items:center;justify-content:center;';
+    modal.innerHTML = `
+        <div style="background:var(--light-bg,#2d2d2d);border-radius:10px;width:90%;max-width:420px;color:var(--text-color,#f0f0f0);box-shadow:0 10px 30px rgba(0,0,0,0.5);overflow:hidden;">
+            <div style="padding:15px 20px;border-bottom:1px solid #444;">
+                <h3 style="margin:0;color:#ff9800;font-size:16px;">⚠️ 同步云端模型库</h3>
+            </div>
+            <div style="padding:20px;line-height:1.7;font-size:14px;">
+                <p style="margin:0 0 12px;">数据源 <b>models.dev</b> 在中国内地访问不稳定，同步可能失败或超时。</p>
+                <p style="margin:0 0 12px;">同步将<b>替换</b>当前提供商列表，如果网络不稳定可能导致列表清空。</p>
+                <p style="margin:0;color:#aaa;font-size:12px;">已有的本地数据会在同步成功后被覆盖。</p>
+            </div>
+            <div style="padding:12px 20px;border-top:1px solid #444;display:flex;gap:10px;justify-content:flex-end;">
+                <button id="sync-cancel-btn" style="padding:8px 16px;background:#555;color:white;border:none;border-radius:5px;cursor:pointer;font-size:13px;">取消</button>
+                <button id="sync-confirm-btn" style="padding:8px 16px;background:var(--primary-color,#e67e22);color:white;border:none;border-radius:5px;cursor:pointer;font-weight:bold;font-size:13px;">确认同步</button>
+            </div>
+            <div id="sync-status" style="display:none;padding:10px 20px;border-top:1px solid #444;font-size:13px;text-align:center;"></div>
+        </div>
+    `;
+    document.body.appendChild(modal);
+
+    document.getElementById('sync-cancel-btn').onclick = () => modal.remove();
+    modal.addEventListener('click', (e) => { if (e.target === modal) modal.remove(); });
+
+    document.getElementById('sync-confirm-btn').onclick = async () => {
+        const statusEl = document.getElementById('sync-status');
+        const confirmBtn = document.getElementById('sync-confirm-btn');
+        confirmBtn.disabled = true;
+        confirmBtn.textContent = '同步中...';
+        statusEl.style.display = 'block';
+        statusEl.style.color = '#aaa';
+        statusEl.textContent = '正在从 models.dev 获取数据...';
+
+        try {
+            const resp = await fetch('https://models.dev/api.json');
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const rawData = await resp.json();
+
+            const slim = _extractSlimProviders(rawData);
+            if (slim.length === 0) throw new Error('提取数据为空');
+
+            await ProvidersDB.set('providers_data', slim);
+            _providersData = null; // 清除内存缓存
+
+            statusEl.style.color = '#4caf50';
+            statusEl.textContent = '✅ 同步成功！已加载 ' + slim.length + ' 个提供商，' + slim.reduce((s, p) => s + p.models.length, 0) + ' 个模型。';
+
+            setTimeout(() => modal.remove(), 2000);
+        } catch (e) {
+            statusEl.style.color = '#f44336';
+            statusEl.textContent = '❌ 同步失败：' + e.message + '。已保留当前数据。';
+            confirmBtn.disabled = false;
+            confirmBtn.textContent = '重试';
+        }
+    };
+}
